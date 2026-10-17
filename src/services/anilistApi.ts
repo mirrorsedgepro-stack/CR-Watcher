@@ -1,7 +1,12 @@
-import { AnimeShow, EpisodeSlot, SimulcastOffsetMode } from '../types/anime';
+import {
+  AnimeShow,
+  DisplayTimezone,
+  EpisodeSlot,
+  SimulcastOffsetMode,
+} from '../types/anime';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
-const CACHE_KEY = 'crunchycast_anilist_raw_v1';
+const CACHE_KEY = 'crunchycast_anilist_raw_v2';
 const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
 
 const MEDIA_FRAGMENT = `
@@ -26,6 +31,11 @@ const MEDIA_FRAGMENT = `
   genres
   averageScore
   popularity
+  trailer {
+    id
+    site
+    thumbnail
+  }
   studios(isMain: true) {
     nodes {
       name
@@ -96,6 +106,18 @@ const COMBINED_QUERY = `
   }
 `;
 
+const USER_LIST_QUERY = `
+  query FetchUserAnimeList($userName: String!) {
+    MediaListCollection(userName: $userName, type: ANIME, status_in: [CURRENT, PLANNING]) {
+      lists {
+        entries {
+          mediaId
+        }
+      }
+    }
+  }
+`;
+
 interface RawMediaNode {
   id: number;
   title: {
@@ -118,6 +140,11 @@ interface RawMediaNode {
   genres: string[];
   averageScore: number | null;
   popularity: number;
+  trailer?: {
+    id: string;
+    site: string;
+    thumbnail?: string | null;
+  } | null;
   studios?: {
     nodes: { name: string }[];
   };
@@ -151,7 +178,7 @@ interface RawMediaNode {
   }[];
 }
 
-const OTHER_EXCLUSIVE_SITES = new Set([
+const OTHER_STREAMING_SITES = new Set([
   'Netflix',
   'Disney Plus',
   'HIDIVE',
@@ -159,6 +186,7 @@ const OTHER_EXCLUSIVE_SITES = new Set([
   'Amazon Prime Video',
   'Bilibili',
   'Bilibili TV',
+  'YouTube',
 ]);
 
 function stripHtmlTags(str: string | null): string | null {
@@ -239,16 +267,60 @@ export async function fetchRawAnimeNodes(forceRefresh = false): Promise<{
   return { nodes, fetchedAt, fromCache: false };
 }
 
+export async function fetchAniListUserWatchlist(userName: string): Promise<number[]> {
+  const cleanName = userName.trim();
+  if (!cleanName) {
+    throw new Error('Please enter an AniList username.');
+  }
+
+  const response = await fetch(ANILIST_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      query: USER_LIST_QUERY,
+      variables: { userName: cleanName },
+    }),
+  });
+
+  const json = await response.json();
+  if (json.errors) {
+    throw new Error(json.errors[0]?.message || `Could not find AniList user "${cleanName}"`);
+  }
+
+  const lists = json.data?.MediaListCollection?.lists || [];
+  const ids = new Set<number>();
+  for (const list of lists) {
+    for (const entry of list.entries || []) {
+      if (typeof entry.mediaId === 'number') {
+        ids.add(entry.mediaId);
+      }
+    }
+  }
+  return Array.from(ids);
+}
+
 const WEEK_SECONDS = 7 * 24 * 60 * 60;
-// Project episodes up through May 15, 2027 so the user can view through March 27, 2027 and further into the future
 const MAX_PROJECTION_UNIX = Math.floor(new Date('2027-05-15T23:59:59Z').getTime() / 1000);
 
 export function buildAnimeShowCatalog(
   rawNodes: RawMediaNode[],
   offsetMode: SimulcastOffsetMode,
-  customShowOffsetsHours: Record<number, number>
+  customShowOffsetsHours: Record<number, number>,
+  displayTimezone: DisplayTimezone = 'local'
 ): AnimeShow[] {
-  const baseOffsetSeconds = offsetMode === 'cr_plus_1h' ? 3600 : 0;
+  // Base offset:
+  // - cr_plus_1h: +1 hour after JP broadcast
+  // - jp_broadcast: 0 hours
+  // - dub_est_2w: +14 days + 1 hour (standard 2-week English Simuldub delay)
+  const baseOffsetSeconds =
+    offsetMode === 'cr_plus_1h'
+      ? 3600
+      : offsetMode === 'dub_est_2w'
+      ? 14 * 24 * 3600 + 3600
+      : 0;
 
   const shows: AnimeShow[] = [];
 
@@ -257,14 +329,12 @@ export function buildAnimeShowCatalog(
     const crLink = links.find((l) => l.site.toLowerCase().includes('crunchyroll'));
     const isCrunchyrollConfirmed = Boolean(crLink);
 
-    // Check if it's already locked exclusively to a rival western service without Crunchyroll
     const hasWesternRivalOnly =
       !isCrunchyrollConfirmed &&
       links.some((l) =>
         ['Netflix', 'Disney Plus', 'HIDIVE', 'Hulu', 'Amazon Prime Video'].includes(l.site)
       );
 
-    // Check if it's purely a Chinese ONA (Bilibili/iQ/WeTV only with no JP/CR presence)
     const isChineseOnlyOna =
       !isCrunchyrollConfirmed &&
       links.length > 0 &&
@@ -279,8 +349,7 @@ export function buildAnimeShowCatalog(
     const customOffsetHours = customShowOffsetsHours[raw.id] ?? 0;
     const totalOffsetSeconds = baseOffsetSeconds + customOffsetHours * 3600;
 
-    // Gather confirmed schedule nodes
-    const confirmedMap = new Map<number, number>(); // episodeNumber -> rawAiringAt
+    const confirmedMap = new Map<number, number>();
     if (raw.airingSchedule?.nodes) {
       for (const node of raw.airingSchedule.nodes) {
         if (node && typeof node.episode === 'number' && typeof node.airingAt === 'number') {
@@ -308,17 +377,14 @@ export function buildAnimeShowCatalog(
         episodeNumber: epNum,
         rawAiringAt: rawTime,
         airingDate: new Date(adjustedMs),
-        isConfirmed: true,
+        isConfirmed: offsetMode !== 'dub_est_2w',
         isPremiere: epNum === 1,
         isFinale: raw.episodes != null && epNum === raw.episodes,
       });
     }
 
-    // Project future weekly episodes if the show is still running or upcoming
     if (confirmedEntries.length > 0) {
       const [lastEpNum, lastRawTime] = confirmedEntries[confirmedEntries.length - 1];
-      // Determine maximum episode count for projection
-      // Standard seasonal cour defaults to 12 episodes if unknown; long-running shows (>24 eps) project by date horizon
       const isLongRunning = lastEpNum > 24 || (raw.episodes != null && raw.episodes > 36);
       const targetMaxEpisodes = isLongRunning
         ? lastEpNum + 35
@@ -350,8 +416,6 @@ export function buildAnimeShowCatalog(
       raw.startDate?.day &&
       raw.status === 'NOT_YET_RELEASED'
     ) {
-      // Upcoming show with an announced calendar date (year, month, day) but no exact timestamp in airingSchedule yet
-      // Default to 23:00 JST (14:00 UTC) on that start date so its projected weekly run is visible
       const isoDateStr = `${raw.startDate.year}-${String(raw.startDate.month).padStart(
         2,
         '0'
@@ -379,7 +443,6 @@ export function buildAnimeShowCatalog(
 
     scheduleSlots.sort((a, b) => a.airingDate.getTime() - b.airingDate.getTime());
 
-    // Compute weekly day and time label from the most relevant upcoming or latest episode slot
     const nowMs = Date.now();
     const referenceSlot =
       scheduleSlots.find((s) => s.airingDate.getTime() >= nowMs) ||
@@ -391,23 +454,30 @@ export function buildAnimeShowCatalog(
 
     if (referenceSlot) {
       weeklyDayIndex = referenceSlot.airingDate.getDay();
+      const tzOpt = displayTimezone !== 'local' ? { timeZone: displayTimezone } : {};
       const dayName = referenceSlot.airingDate.toLocaleDateString(undefined, {
         weekday: 'long',
+        ...tzOpt,
       });
       const timeStr = referenceSlot.airingDate.toLocaleTimeString(undefined, {
         hour: 'numeric',
         minute: '2-digit',
+        ...tzOpt,
       });
       weeklyTimeLabel = `${dayName}s at ${timeStr}`;
     }
 
+    const finaleSlot = scheduleSlots.find((s) => s.isFinale) || null;
+
     const searchTitle = encodeURIComponent(raw.title.english || raw.title.romaji);
     const crunchyrollUrl =
-      crLink?.url && crLink.url !== 'https://crunchyroll.com' && crLink.url !== 'https://www.crunchyroll.com/'
+      crLink?.url &&
+      crLink.url !== 'https://crunchyroll.com' &&
+      crLink.url !== 'https://www.crunchyroll.com/'
         ? crLink.url
         : `https://www.crunchyroll.com/search?q=${searchTitle}`;
 
-    const otherStreamingLinks = links.filter((l) => OTHER_EXCLUSIVE_SITES.has(l.site));
+    const otherStreamingLinks = links.filter((l) => OTHER_STREAMING_SITES.has(l.site));
 
     shows.push({
       id: raw.id,
@@ -432,6 +502,14 @@ export function buildAnimeShowCatalog(
       averageScore: raw.averageScore,
       popularity: raw.popularity || 0,
       studios: raw.studios?.nodes?.map((n) => n.name) || [],
+      trailer:
+        raw.trailer && raw.trailer.id && raw.trailer.site
+          ? {
+              id: raw.trailer.id,
+              site: raw.trailer.site.toLowerCase(),
+              thumbnail: raw.trailer.thumbnail || null,
+            }
+          : null,
       startDate: raw.startDate || { year: null, month: null, day: null },
       endDate: raw.endDate || { year: null, month: null, day: null },
       isCrunchyrollConfirmed,
@@ -441,9 +519,9 @@ export function buildAnimeShowCatalog(
       hasKnownWeeklyTime: scheduleSlots.length > 0,
       weeklyDayIndex,
       weeklyTimeLabel,
+      finaleSlot,
     });
   }
 
-  // Sort by popularity descending
   return shows.sort((a, b) => b.popularity - a.popularity);
 }

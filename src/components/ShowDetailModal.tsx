@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Clock,
@@ -11,9 +11,13 @@ import {
   Star,
   CalendarPlus,
   Sliders,
+  Check,
+  CheckCheck,
+  Film,
 } from 'lucide-react';
 import {
   AnimeShow,
+  DisplayTimezone,
   TitleLanguage,
 } from '../types/anime';
 import {
@@ -33,8 +37,12 @@ interface ShowDetailModalProps {
   onClose: () => void;
   now: Date;
   titleLang: TitleLanguage;
+  displayTimezone: DisplayTimezone;
   watchlist: Set<number>;
   toggleWatchlist: (showId: number) => void;
+  watchedEpisodeNums: Set<number>;
+  onToggleEpisodeWatched: (showId: number, episodeNumber: number) => void;
+  onMarkUpToEpisodeWatched: (showId: number, upToEpisode: number) => void;
   customOffsetHours: number;
   setCustomShowOffset: (showId: number, hours: number) => void;
 }
@@ -44,11 +52,17 @@ export const ShowDetailModal: React.FC<ShowDetailModalProps> = ({
   onClose,
   now,
   titleLang,
+  displayTimezone,
   watchlist,
   toggleWatchlist,
+  watchedEpisodeNums,
+  onToggleEpisodeWatched,
+  onMarkUpToEpisodeWatched,
   customOffsetHours,
   setCustomShowOffset,
 }) => {
+  const [showTrailer, setShowTrailer] = useState(false);
+
   if (!show) return null;
 
   const title = getDisplayTitle(show, titleLang);
@@ -186,18 +200,60 @@ export const ShowDetailModal: React.FC<ShowDetailModalProps> = ({
                   <span>{inWatchlist ? 'In My Watchlist' : 'Add to Watchlist'}</span>
                 </button>
 
+                {show.trailer && show.trailer.site === 'youtube' && (
+                  <button
+                    onClick={() => setShowTrailer(!showTrailer)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-300 text-xs sm:text-sm font-bold transition-all"
+                  >
+                    <Film className="w-4 h-4" />
+                    <span>{showTrailer ? 'Hide Trailer' : 'Watch Trailer'}</span>
+                  </button>
+                )}
+
                 {show.scheduleSlots.length > 0 && (
                   <button
                     onClick={handleExportShowIcs}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1B1D24] hover:bg-[#232630] border border-[#2A2E3B] text-zinc-200 text-xs sm:text-sm font-semibold transition-all"
                   >
                     <Download className="w-4 h-4 text-[#2ABDBB]" />
-                    <span>Export Show .ICS</span>
+                    <span>Export .ICS</span>
                   </button>
                 )}
               </div>
+
+              {/* Additional Streaming Links Matrix */}
+              {show.otherStreamingLinks.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                  <span className="text-zinc-500">Also listed on:</span>
+                  {show.otherStreamingLinks.map((link) => (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-0.5 rounded bg-[#0B0C10] border border-[#2A2E3B] text-zinc-300 hover:text-white hover:border-zinc-500 flex items-center gap-1"
+                    >
+                      <span>{link.site}</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Embedded YouTube Trailer */}
+          {showTrailer && show.trailer && show.trailer.site === 'youtube' && (
+            <div className="rounded-2xl overflow-hidden border border-[#2A2E3B] bg-black aspect-video">
+              <iframe
+                src={`https://www.youtube.com/embed/${show.trailer.id}?autoplay=1`}
+                title={`${title} Official Trailer`}
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          )}
 
           {/* Per-Show Custom Simulcast Offset Control */}
           <div className="bg-[#0B0C10] border border-[#2A2E3B] rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
@@ -205,7 +261,7 @@ export const ShowDetailModal: React.FC<ShowDetailModalProps> = ({
               <Sliders className="w-4 h-4 text-[#F47521]" />
               <span>
                 <strong>Custom Show Time Adjustment:</strong> Fine-tune this show&apos;s Crunchyroll
-                drop offset if it differs from the standard +1h delay.
+                drop offset if it differs from the default.
               </span>
             </div>
 
@@ -240,12 +296,12 @@ export const ShowDetailModal: React.FC<ShowDetailModalProps> = ({
 
           {/* Complete Episode Release Schedule Table */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-base font-extrabold text-white flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-[#F47521]" />
                 <span>
                   Episode Release Dates &amp; Weekly Showing Times ({show.scheduleSlots.length}{' '}
-                  Episodes)
+                  Episodes • {watchedEpisodeNums.size} Watched)
                 </span>
               </h3>
             </div>
@@ -260,29 +316,49 @@ export const ShowDetailModal: React.FC<ShowDetailModalProps> = ({
                 <div className="max-h-80 overflow-y-auto divide-y divide-[#2A2E3B]/60">
                   {show.scheduleSlots.map((slot) => {
                     const countdown = formatCountdown(slot.airingDate, now);
+                    const isWatched = watchedEpisodeNums.has(slot.episodeNumber);
 
                     return (
                       <div
                         key={slot.id}
                         className={`px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs ${
-                          countdown.isPast
-                            ? 'opacity-65 bg-[#0B0C10]'
+                          isWatched
+                            ? 'bg-emerald-950/15 opacity-70'
+                            : countdown.isPast
+                            ? 'opacity-80 bg-[#0B0C10]'
                             : 'bg-[#141519]/60 hover:bg-[#1B1D24]'
                         }`}
                       >
                         <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => onToggleEpisodeWatched(show.id, slot.episodeNumber)}
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${
+                              isWatched
+                                ? 'bg-emerald-500 border-emerald-500 text-black'
+                                : 'bg-[#141519] border-[#2A2E3B] text-zinc-500 hover:border-emerald-400 hover:text-emerald-400'
+                            }`}
+                            title={isWatched ? 'Watched (Click to unmark)' : 'Mark episode watched'}
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          </button>
+
                           <span className="px-2.5 py-1 rounded-lg font-extrabold bg-[#F47521]/20 text-[#F47521] border border-[#F47521]/30 min-w-[58px] text-center">
                             EP {slot.episodeNumber}
                           </span>
                           <div>
-                            <div className="font-bold text-white">
-                              {formatFullDayHeader(slot.airingDate)}
+                            <div className="font-bold text-white flex items-center gap-2">
+                              <span>{formatFullDayHeader(slot.airingDate, displayTimezone)}</span>
+                              {isWatched && (
+                                <span className="text-[10px] font-extrabold text-emerald-400 uppercase">
+                                  ✓ Watched
+                                </span>
+                              )}
                             </div>
                             <div className="text-zinc-400 flex items-center gap-2 mt-0.5">
                               <span>
                                 Showing Time:{' '}
                                 <strong className="text-[#F47521]">
-                                  {formatTimeShort(slot.airingDate)}
+                                  {formatTimeShort(slot.airingDate, displayTimezone)}
                                 </strong>
                               </span>
                               {slot.isPremiere && (
@@ -295,7 +371,20 @@ export const ShowDetailModal: React.FC<ShowDetailModalProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5">
+                          {!isWatched && slot.episodeNumber > 1 && (
+                            <button
+                              onClick={() =>
+                                onMarkUpToEpisodeWatched(show.id, slot.episodeNumber)
+                              }
+                              className="px-2 py-1 rounded bg-[#1B1D24] hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-300 border border-[#2A2E3B] text-[10px] font-semibold flex items-center gap-1 transition-all"
+                              title={`Mark Episodes 1 through ${slot.episodeNumber} as watched`}
+                            >
+                              <CheckCheck className="w-3 h-3" />
+                              <span>1–{slot.episodeNumber}</span>
+                            </button>
+                          )}
+
                           {slot.isConfirmed ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
                               <CheckCircle2 className="w-3 h-3" /> Confirmed

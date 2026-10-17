@@ -10,9 +10,11 @@ import {
   Sparkles,
   Flame,
   FastForward,
+  Check,
 } from 'lucide-react';
 import {
   AnimeShow,
+  DisplayTimezone,
   EnrichedEpisodeItem,
   TitleLanguage,
 } from '../types/anime';
@@ -34,8 +36,11 @@ interface WeeklyCalendarViewProps {
   setAnchorDate: (date: Date) => void;
   now: Date;
   titleLang: TitleLanguage;
+  displayTimezone: DisplayTimezone;
   watchlist: Set<number>;
   toggleWatchlist: (showId: number) => void;
+  isEpisodeWatched: (showId: number, episodeNumber: number) => boolean;
+  onToggleEpisodeWatched: (showId: number, episodeNumber: number) => void;
   onSelectShow: (show: AnimeShow) => void;
 }
 
@@ -56,18 +61,19 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
   setAnchorDate,
   now,
   titleLang,
+  displayTimezone,
   watchlist,
   toggleWatchlist,
+  isEpisodeWatched,
+  onToggleEpisodeWatched,
   onSelectShow,
 }) => {
-  // Default to rolling 7 days starting from anchorDate so when anchorDate === Today, Column 1 is Today!
   const [rolling7Days, setRolling7Days] = useState<boolean>(true);
 
   const weekDays = getWeekDays(anchorDate, rolling7Days);
   const firstDay = weekDays[0];
   const lastDay = weekDays[6];
 
-  // Calculate week offset from today for the slider (0 to 28 weeks into the future)
   const diffDaysFromToday = Math.round(
     (startOfDay(anchorDate).getTime() - startOfDay(now).getTime()) / (1000 * 60 * 60 * 24)
   );
@@ -95,6 +101,7 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
             <button
               onClick={() => setAnchorDate(addDays(anchorDate, -7))}
               className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#1B1D24] hover:bg-[#232630] border border-[#2A2E3B] text-xs sm:text-sm font-semibold text-zinc-200 transition-all"
+              title="Previous 7 days (Keyboard shortcut: ←)"
             >
               <ChevronLeft className="w-4 h-4 text-[#F47521]" />
               <span>Prev 7d</span>
@@ -107,6 +114,7 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
                   ? 'bg-[#F47521] text-black border-[#F47521]'
                   : 'bg-[#1B1D24] text-[#F47521] border-[#F47521]/40 hover:bg-[#F47521]/15'
               }`}
+              title="Jump back to Today (Keyboard shortcut: T)"
             >
               Start from Today
             </button>
@@ -114,6 +122,7 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
             <button
               onClick={() => setAnchorDate(addDays(anchorDate, 7))}
               className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#1B1D24] hover:bg-[#232630] border border-[#2A2E3B] text-xs sm:text-sm font-semibold text-zinc-200 transition-all"
+              title="Next 7 days (Keyboard shortcut: →)"
             >
               <span>Next 7d</span>
               <ChevronRight className="w-4 h-4 text-[#F47521]" />
@@ -276,14 +285,17 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
                     const title = getDisplayTitle(show, titleLang);
                     const countdown = formatCountdown(slot.airingDate, now);
                     const inWatchlist = watchlist.has(show.id);
+                    const watched = isEpisodeWatched(show.id, slot.episodeNumber);
 
                     return (
                       <div
                         key={slot.id}
                         onClick={() => onSelectShow(show)}
                         className={`group relative rounded-xl p-2.5 border transition-all cursor-pointer ${
-                          countdown.isPast
-                            ? 'bg-[#0B0C10]/70 border-[#2A2E3B]/60 opacity-80 hover:opacity-100 hover:border-zinc-600'
+                          watched
+                            ? 'bg-emerald-950/10 border-emerald-500/30 opacity-65 hover:opacity-100'
+                            : countdown.isPast
+                            ? 'bg-[#0B0C10]/70 border-[#2A2E3B]/60 opacity-85 hover:opacity-100 hover:border-zinc-600'
                             : countdown.isImminent
                             ? 'bg-[#1B1D24] border-[#F47521]/60 hover:border-[#F47521] shadow-md shadow-[#F47521]/5'
                             : 'bg-[#1B1D24] border-[#2A2E3B] hover:border-[#F47521]/60 hover:bg-[#232630]'
@@ -294,20 +306,22 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
                           <div className="flex items-center gap-1.5">
                             <Clock className="w-3.5 h-3.5 text-[#F47521]" />
                             <span className="text-xs font-extrabold text-white">
-                              {formatTimeShort(slot.airingDate)}
+                              {formatTimeShort(slot.airingDate, displayTimezone)}
                             </span>
                           </div>
 
                           <span
                             className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                              countdown.isPast
+                              watched
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : countdown.isPast
                                 ? 'bg-zinc-800 text-zinc-400'
                                 : countdown.isImminent
                                 ? 'bg-[#F47521] text-black animate-pulse'
                                 : 'bg-[#0B0C10] text-[#F47521] border border-[#F47521]/30'
                             }`}
                           >
-                            {countdown.text}
+                            {watched ? '✓ Watched' : countdown.text}
                           </span>
                         </div>
 
@@ -364,15 +378,24 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
                                 Projected
                               </span>
                             )}
-                            {!show.isCrunchyrollConfirmed && (
-                              <span className="text-purple-300 font-medium ml-1">• Likely CR</span>
-                            )}
                           </div>
 
                           <div
                             className="flex items-center gap-1"
                             onClick={(e) => e.stopPropagation()}
                           >
+                            <button
+                              onClick={() => onToggleEpisodeWatched(show.id, slot.episodeNumber)}
+                              className={`p-1 rounded transition-colors ${
+                                watched
+                                  ? 'bg-emerald-500 text-black'
+                                  : 'hover:bg-[#0B0C10] text-zinc-500 hover:text-emerald-400'
+                              }`}
+                              title={watched ? 'Mark Unwatched' : 'Mark Episode Watched'}
+                            >
+                              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            </button>
+
                             <button
                               onClick={() => toggleWatchlist(show.id)}
                               className={`p-1 rounded hover:bg-[#0B0C10] transition-colors ${
@@ -384,6 +407,7 @@ export const WeeklyCalendarView: React.FC<WeeklyCalendarViewProps> = ({
                                 className={`w-3.5 h-3.5 ${inWatchlist ? 'fill-[#FAB818]' : ''}`}
                               />
                             </button>
+
                             <a
                               href={show.crunchyrollUrl}
                               target="_blank"

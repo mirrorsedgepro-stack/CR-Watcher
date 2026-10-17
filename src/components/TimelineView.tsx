@@ -10,9 +10,11 @@ import {
   CalendarPlus,
   Download,
   ChevronRight,
+  Check,
 } from 'lucide-react';
 import {
   AnimeShow,
+  DisplayTimezone,
   EnrichedEpisodeItem,
   TitleLanguage,
 } from '../types/anime';
@@ -34,8 +36,11 @@ interface TimelineViewProps {
   episodes: EnrichedEpisodeItem[];
   now: Date;
   titleLang: TitleLanguage;
+  displayTimezone: DisplayTimezone;
   watchlist: Set<number>;
   toggleWatchlist: (showId: number) => void;
+  isEpisodeWatched: (showId: number, episodeNumber: number) => boolean;
+  onToggleEpisodeWatched: (showId: number, episodeNumber: number) => void;
   onSelectShow: (show: AnimeShow) => void;
 }
 
@@ -53,8 +58,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   episodes,
   now,
   titleLang,
+  displayTimezone,
   watchlist,
   toggleWatchlist,
+  isEpisodeWatched,
+  onToggleEpisodeWatched,
   onSelectShow,
 }) => {
   const [monthScope, setMonthScope] = useState<MonthScope>('today_to_mar27');
@@ -91,7 +99,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       .sort((a, b) => a.slot.airingDate.getTime() - b.slot.airingDate.getTime());
   }, [episodes, now, monthScope, milestonesOnly, hideAlreadyAiredToday]);
 
-  // Group by calendar day string
   const groupedDays = useMemo(() => {
     const map = new Map<string, { date: Date; items: EnrichedEpisodeItem[] }>();
     for (const item of filteredItems) {
@@ -132,8 +139,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
               Showing <strong className="text-white">{filteredItems.length}</strong> scheduled
-              episode drops across <strong className="text-white">{groupedDays.length}</strong> days
-              in your local timezone.
+              episode drops across <strong className="text-white">{groupedDays.length}</strong> days.
             </p>
           </div>
 
@@ -237,7 +243,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                 >
                   <div className="flex items-center gap-2.5">
                     <span className="text-sm sm:text-base font-extrabold text-white">
-                      {formatFullDayHeader(date)}
+                      {formatFullDayHeader(date, displayTimezone)}
                     </span>
                     {isToday && (
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase bg-[#F47521] text-black">
@@ -261,30 +267,35 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                     const title = getDisplayTitle(show, titleLang);
                     const countdown = formatCountdown(slot.airingDate, now);
                     const inWatchlist = watchlist.has(show.id);
+                    const watched = isEpisodeWatched(show.id, slot.episodeNumber);
 
                     return (
                       <div
                         key={slot.id}
                         onClick={() => onSelectShow(show)}
-                        className="p-3.5 sm:px-5 hover:bg-[#1B1D24] transition-colors flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 cursor-pointer"
+                        className={`p-3.5 sm:px-5 hover:bg-[#1B1D24] transition-colors flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 cursor-pointer ${
+                          watched ? 'opacity-65 bg-emerald-950/10' : ''
+                        }`}
                       >
                         {/* Left: Time + Countdown */}
                         <div className="flex items-center gap-3 w-full sm:w-44 shrink-0">
                           <div className="px-3 py-2 rounded-xl bg-[#0B0C10] border border-[#2A2E3B] text-center min-w-[92px]">
                             <div className="text-xs sm:text-sm font-extrabold text-white flex items-center justify-center gap-1">
                               <Clock className="w-3.5 h-3.5 text-[#F47521]" />
-                              {formatTimeShort(slot.airingDate)}
+                              {formatTimeShort(slot.airingDate, displayTimezone)}
                             </div>
                             <div
                               className={`text-[10px] font-bold mt-0.5 ${
-                                countdown.isPast
+                                watched
+                                  ? 'text-emerald-400'
+                                  : countdown.isPast
                                   ? 'text-zinc-500'
                                   : countdown.isImminent
                                   ? 'text-[#F47521]'
                                   : 'text-zinc-400'
                               }`}
                             >
-                              {countdown.text}
+                              {watched ? '✓ Watched' : countdown.text}
                             </div>
                           </div>
 
@@ -356,6 +367,18 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
+                            onClick={() => onToggleEpisodeWatched(show.id, slot.episodeNumber)}
+                            className={`p-2 rounded-xl border transition-all ${
+                              watched
+                                ? 'bg-emerald-500 border-emerald-500 text-black'
+                                : 'bg-[#0B0C10] border-[#2A2E3B] text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40'
+                            }`}
+                            title={watched ? 'Watched (Click to unmark)' : 'Mark Episode Watched'}
+                          >
+                            <Check className="w-4 h-4 stroke-[2.5]" />
+                          </button>
+
+                          <button
                             onClick={() => toggleWatchlist(show.id)}
                             className={`p-2 rounded-xl border transition-all ${
                               inWatchlist
@@ -397,7 +420,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
             );
           })}
 
-          {/* Load More Days Button */}
           {visibleDaysLimit < groupedDays.length && (
             <div className="flex justify-center pt-2">
               <button
