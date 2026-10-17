@@ -1,3 +1,5 @@
+import { DisplayTimezone } from '../types/anime';
+
 export const TARGET_END_DATE = new Date('2027-03-27T23:59:59');
 
 export function startOfDay(date: Date): Date {
@@ -28,49 +30,56 @@ export function isSameDay(a: Date, b: Date): boolean {
 
 /**
  * Returns the 7 days of the week starting on Monday for a given anchor date,
- * OR if `startFromAnchorDay` is true, returns 7 consecutive days starting on `anchorDate`.
+ * OR if `rolling7Days` is true, returns 7 consecutive days starting on `anchorDate`.
  */
 export function getWeekDays(anchorDate: Date, rolling7Days = false): Date[] {
   const start = startOfDay(anchorDate);
   if (rolling7Days) {
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }
-  // Standard Monday-start week
-  const day = start.getDay(); // 0 (Sun) to 6 (Sat)
+  const day = start.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
   const monday = addDays(start, diffToMonday);
   return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
 }
 
-export function formatTimeShort(date: Date): string {
-  return date.toLocaleTimeString(undefined, {
+export function formatTimeShort(date: Date, tz: DisplayTimezone = 'local'): string {
+  const options: Intl.DateTimeFormatOptions = {
     hour: 'numeric',
     minute: '2-digit',
-  });
+    ...(tz !== 'local' ? { timeZone: tz } : {}),
+  };
+  return date.toLocaleTimeString(undefined, options);
 }
 
-export function formatDateShort(date: Date): string {
-  return date.toLocaleDateString(undefined, {
+export function formatDateShort(date: Date, tz: DisplayTimezone = 'local'): string {
+  const options: Intl.DateTimeFormatOptions = {
     month: 'short',
     day: 'numeric',
-  });
+    ...(tz !== 'local' ? { timeZone: tz } : {}),
+  };
+  return date.toLocaleDateString(undefined, options);
 }
 
-export function formatDateWithYear(date: Date): string {
-  return date.toLocaleDateString(undefined, {
+export function formatDateWithYear(date: Date, tz: DisplayTimezone = 'local'): string {
+  const options: Intl.DateTimeFormatOptions = {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  });
+    ...(tz !== 'local' ? { timeZone: tz } : {}),
+  };
+  return date.toLocaleDateString(undefined, options);
 }
 
-export function formatFullDayHeader(date: Date): string {
-  return date.toLocaleDateString(undefined, {
+export function formatFullDayHeader(date: Date, tz: DisplayTimezone = 'local'): string {
+  const options: Intl.DateTimeFormatOptions = {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  });
+    ...(tz !== 'local' ? { timeZone: tz } : {}),
+  };
+  return date.toLocaleDateString(undefined, options);
 }
 
 export function formatCountdown(targetDate: Date, now: Date): {
@@ -123,13 +132,23 @@ export function formatCountdown(targetDate: Date, now: Date): {
   };
 }
 
-export function getLocalTimezoneName(): string {
+export function getTimezoneDisplayLabel(tz: DisplayTimezone): string {
+  if (tz !== 'local') {
+    const labels: Record<Exclude<DisplayTimezone, 'local'>, string> = {
+      'Asia/Tokyo': 'JST (Tokyo, UTC+9)',
+      'America/Los_Angeles': 'PT (Los Angeles)',
+      'America/New_York': 'ET (New York)',
+      'Europe/London': 'UK (London)',
+      UTC: 'UTC',
+    };
+    return labels[tz];
+  }
   try {
     const intl = Intl.DateTimeFormat(undefined, { timeZoneName: 'short' });
     const parts = intl.formatToParts(new Date());
-    const tz = parts.find((p) => p.type === 'timeZoneName')?.value;
+    const shortTz = parts.find((p) => p.type === 'timeZoneName')?.value;
     const iana = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return tz ? `${tz} (${iana})` : iana;
+    return shortTz ? `${shortTz} (${iana})` : iana;
   } catch {
     return 'Local Time';
   }

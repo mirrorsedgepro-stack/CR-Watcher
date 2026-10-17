@@ -1,8 +1,16 @@
-export type ViewMode = 'weekly' | 'timeline' | 'catalog';
+export type ViewMode = 'weekly' | 'timeline' | 'catalog' | 'heatmap';
 
 export type TitleLanguage = 'english' | 'romaji';
 
-export type SimulcastOffsetMode = 'cr_plus_1h' | 'jp_broadcast';
+export type SimulcastOffsetMode = 'cr_plus_1h' | 'jp_broadcast' | 'dub_est_2w';
+
+export type DisplayTimezone =
+  | 'local'
+  | 'Asia/Tokyo'
+  | 'America/Los_Angeles'
+  | 'America/New_York'
+  | 'Europe/London'
+  | 'UTC';
 
 export interface ExternalLink {
   id: number;
@@ -13,13 +21,19 @@ export interface ExternalLink {
   color?: string;
 }
 
+export interface AnimeTrailer {
+  id: string;
+  site: string;
+  thumbnail?: string | null;
+}
+
 export interface EpisodeSlot {
   id: string;
   showId: number;
   episodeNumber: number;
   /** Raw unix timestamp (seconds) from AniList (JP broadcast time) */
   rawAiringAt: number;
-  /** Adjusted Date object including simulcast offset + any per-show custom offset */
+  /** Adjusted Date object including simulcast/dub offset + any per-show custom offset */
   airingDate: Date;
   /** True if directly in AniList's confirmed airingSchedule, false if projected weekly */
   isConfirmed: boolean;
@@ -50,6 +64,7 @@ export interface AnimeShow {
   averageScore: number | null;
   popularity: number;
   studios: string[];
+  trailer: AnimeTrailer | null;
   startDate: {
     year: number | null;
     month: number | null;
@@ -69,10 +84,12 @@ export interface AnimeShow {
   scheduleSlots: EpisodeSlot[];
   /** True if we have a weekly day/time slot (either from confirmed schedule or full startDate with time) */
   hasKnownWeeklyTime: boolean;
-  /** Day of week in user's local timezone (0 = Sun ... 6 = Sat) for its regular slot */
+  /** Day of week in selected timezone (0 = Sun ... 6 = Sat) for its regular slot */
   weeklyDayIndex: number | null;
-  /** Formatted local weekly slot string, e.g., "Saturdays at 2:00 AM" */
+  /** Formatted weekly slot string, e.g., "Saturdays at 2:00 AM" */
   weeklyTimeLabel: string | null;
+  /** Finale episode slot if known/projected */
+  finaleSlot: EpisodeSlot | null;
 }
 
 export interface EnrichedEpisodeItem {
@@ -86,6 +103,7 @@ export interface FilterState {
   selectedDay: number | 'all'; // 0-6 or 'all'
   includeUnassignedUpcoming: boolean;
   watchlistOnly: boolean;
+  hideWatched: boolean;
   statusFilter: 'all' | 'confirmed' | 'projected';
   seasonFilter: 'all' | 'FALL_2026' | 'WINTER_2027';
 }
