@@ -83,11 +83,11 @@ export const ShowDetailModal: React.FC<ShowDetailModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-4xl bg-[#141519] border border-[#2A2E3B] rounded-2xl overflow-hidden shadow-2xl my-auto max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-4xl bg-[#141519] border-t sm:border border-[#2A2E3B] rounded-t-3xl sm:rounded-2xl overflow-hidden shadow-2xl sm:my-auto max-h-[92dvh] sm:max-h-[90vh] flex flex-col pb-safe"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Banner */}

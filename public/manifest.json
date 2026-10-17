@@ -1,0 +1,18 @@
+{
+  "name": "CrunchyCast — Simulcast Calendar",
+  "short_name": "CrunchyCast",
+  "description": "Track Crunchyroll simulcast episode release dates, weekly showing times, and future anime schedules through March 27.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0C10",
+  "theme_color": "#0B0C10",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

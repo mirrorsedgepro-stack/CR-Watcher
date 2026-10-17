@@ -483,21 +483,21 @@ export function App() {
         searchInputRef={searchInputRef}
       />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-3 sm:py-5 space-y-4 sm:space-y-5">
         {/* Dropping Soon / Up Next Strip */}
         {!isLoading && droppingSoon.length > 0 && (
-          <div className="bg-gradient-to-r from-[#141519] via-[#1B1D24] to-[#141519] border border-[#F47521]/30 rounded-2xl p-3.5 shadow-lg">
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#F47521]">
-                <Flame className="w-4 h-4 fill-[#F47521]" />
-                <span>Dropping Soon from Today (Next 48 Hours)</span>
+          <div className="bg-gradient-to-r from-[#141519] via-[#1B1D24] to-[#141519] border border-[#F47521]/30 rounded-2xl p-3 sm:p-3.5 shadow-lg">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-extrabold uppercase tracking-wider text-[#F47521]">
+                <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#F47521] shrink-0" />
+                <span>Dropping Soon (Next 48 Hours)</span>
               </div>
-              <span className="text-[11px] text-zinc-400">
-                Click any show to inspect its full weekly release calendar, trailer &amp; progress
+              <span className="hidden sm:inline text-[11px] text-zinc-400">
+                Tap any show to inspect its full weekly release calendar, trailer &amp; progress
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+            <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-0.5">
               {droppingSoon.map(({ slot, show }) => {
                 const title = getDisplayTitle(show, titleLang);
                 const countdown = formatCountdown(slot.airingDate, now);
@@ -506,7 +506,7 @@ export function App() {
                   <div
                     key={slot.id}
                     onClick={() => setSelectedShowId(show.id)}
-                    className="bg-[#0B0C10]/90 hover:bg-[#0B0C10] border border-[#2A2E3B] hover:border-[#F47521] rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer transition-all"
+                    className="snap-start min-w-[235px] sm:min-w-0 bg-[#0B0C10]/90 hover:bg-[#0B0C10] border border-[#2A2E3B] hover:border-[#F47521] rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer transition-all shrink-0"
                   >
                     <img
                       src={show.coverImage.large}
@@ -627,12 +627,12 @@ export function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-[#2A2E3B] bg-[#0B0C10] py-4 px-6 text-xs text-zinc-500">
+      <footer className="border-t border-[#2A2E3B] bg-[#0B0C10] pt-4 pb-20 md:pb-4 px-4 sm:px-6 text-xs text-zinc-500">
         <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="font-bold text-zinc-300">CrunchyCast Simulcast Tracker</span>
-            <span>•</span>
-            <span className="inline-flex items-center gap-1.5 text-zinc-400">
+            <span className="hidden md:inline">•</span>
+            <span className="hidden md:inline-flex items-center gap-1.5 text-zinc-400">
               <Keyboard className="w-3.5 h-3.5 text-[#F47521]" />
               <span>Shortcuts:</span>
               <kbd className="px-1.5 py-0.5 rounded bg-[#141519] border border-[#2A2E3B] text-zinc-300">

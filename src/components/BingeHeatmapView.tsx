@@ -1,9 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Flame,
-  Sparkles,
   Calendar,
-  CheckCircle2,
   Bookmark,
   Trophy,
   ArrowRight,
@@ -16,7 +14,6 @@ import {
 } from '../types/anime';
 import {
   formatCountdown,
-  formatDateShort,
   formatDateWithYear,
   formatTimeShort,
   startOfDay,
@@ -37,12 +34,12 @@ interface BingeHeatmapViewProps {
 }
 
 const MONTHS_TO_MAR27 = [
-  { key: '2026-10', label: 'October 2026', year: 2026, month: 9 },
-  { key: '2026-11', label: 'November 2026', year: 2026, month: 10 },
-  { key: '2026-12', label: 'December 2026', year: 2026, month: 11 },
-  { key: '2027-01', label: 'January 2027', year: 2027, month: 0 },
-  { key: '2027-02', label: 'February 2027', year: 2027, month: 1 },
-  { key: '2027-03', label: 'March 2027 (Target: Mar 27)', year: 2027, month: 2 },
+  { key: '2026-10', label: 'Oct 2026', year: 2026, month: 9 },
+  { key: '2026-11', label: 'Nov 2026', year: 2026, month: 10 },
+  { key: '2026-12', label: 'Dec 2026', year: 2026, month: 11 },
+  { key: '2027-01', label: 'Jan 2027', year: 2027, month: 0 },
+  { key: '2027-02', label: 'Feb 2027', year: 2027, month: 1 },
+  { key: '2027-03', label: 'Mar 2027 (→ Mar 27)', year: 2027, month: 2 },
 ];
 
 export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
@@ -58,7 +55,6 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
 }) => {
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>('2026-10');
 
-  // Map YYYY-MM-DD -> stats
   const dayStatsMap = useMemo(() => {
     const map = new Map<
       string,
@@ -81,7 +77,6 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
     return map;
   }, [episodes]);
 
-  // Shows with a known or projected Season Finale date between Today and March 27, 2027 (or shortly after)
   const bingeFinaleShows = useMemo(() => {
     const todayStart = startOfDay(now);
     return shows
@@ -99,7 +94,6 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
     const firstDay = new Date(activeMonth.year, activeMonth.month, 1);
     const lastDay = new Date(activeMonth.year, activeMonth.month + 1, 0);
     const totalDays = lastDay.getDate();
-    // Monday-based offset (0 = Mon ... 6 = Sun)
     const startWeekday = (firstDay.getDay() + 6) % 7;
 
     const cells: ({ day: number; date: Date; key: string } | null)[] = [];
@@ -117,22 +111,22 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
   }, [activeMonth]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Section 1: Interactive Release Density Heatmap (Today -> March 27) */}
-      <section className="bg-[#141519] border border-[#2A2E3B] rounded-2xl p-5 shadow-xl space-y-4">
+      <section className="bg-[#141519] border border-[#2A2E3B] rounded-2xl p-3 sm:p-5 shadow-xl space-y-3 sm:space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-[#F47521]" />
-              <span>Simulcast Release Density Heatmap (Today → March 27, 2027)</span>
+            <h2 className="text-base sm:text-xl font-extrabold text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[#F47521] shrink-0" />
+              <span>Simulcast Release Density Heatmap (Today → Mar 27)</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Click any date cell to jump directly to that week&apos;s full simulcast schedule.
+              Tap any date cell to jump directly to that week&apos;s full simulcast schedule.
             </p>
           </div>
 
           {/* Month Selector Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 w-full sm:w-auto">
             {MONTHS_TO_MAR27.map((m) => (
               <button
                 key={m.key}
@@ -150,7 +144,7 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
         </div>
 
         {/* Weekday Headers */}
-        <div className="grid grid-cols-7 gap-2 text-center text-xs font-extrabold uppercase tracking-wider text-zinc-400 pt-2">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-zinc-400 pt-1">
           <div>Mon</div>
           <div>Tue</div>
           <div>Wed</div>
@@ -161,13 +155,13 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
         </div>
 
         {/* Calendar Cells */}
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {daysInMonthGrid.map((cell, idx) => {
             if (!cell) {
               return (
                 <div
                   key={`empty-${idx}`}
-                  className="h-24 rounded-xl bg-[#0B0C10]/30 border border-[#2A2E3B]/30"
+                  className="h-14 sm:h-24 md:h-28 rounded-lg sm:rounded-xl bg-[#0B0C10]/30 border border-[#2A2E3B]/30"
                 />
               );
             }
@@ -196,13 +190,13 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
               <div
                 key={cell.key}
                 onClick={() => onJumpToDateInWeekly(cell.date)}
-                className={`h-24 sm:h-28 rounded-xl p-2 border flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] ${intensityClass} ${
+                className={`h-14 sm:h-24 md:h-28 rounded-lg sm:rounded-xl p-1 sm:p-2 border flex flex-col justify-between cursor-pointer transition-all sm:hover:scale-[1.02] ${intensityClass} ${
                   isToday ? 'ring-2 ring-[#F47521]' : isMar27 ? 'ring-2 ring-[#2ABDBB]' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span
-                    className={`text-xs sm:text-sm font-extrabold ${
+                    className={`text-[11px] sm:text-sm font-extrabold ${
                       isToday
                         ? 'text-[#F47521]'
                         : isMar27
@@ -213,24 +207,31 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
                     {cell.day}
                   </span>
                   {isToday && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#F47521] text-black uppercase">
+                    <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#F47521] text-black uppercase">
                       Today
                     </span>
                   )}
                   {isMar27 && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#2ABDBB] text-black uppercase">
+                    <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#2ABDBB] text-black uppercase">
                       Mar 27
                     </span>
                   )}
                 </div>
 
-                <div className="space-y-1">
+                {/* Mobile compact indicator vs Desktop detailed badges */}
+                <div className="space-y-0.5 sm:space-y-1">
                   {count > 0 ? (
                     <>
-                      <div className="text-xs font-extrabold text-white">
-                        {count} {count === 1 ? 'Episode' : 'Episodes'}
+                      <div className="text-[10px] sm:text-xs font-extrabold text-white truncate">
+                        <span>{count}</span>
+                        <span className="hidden sm:inline">
+                          {count === 1 ? ' Episode' : ' Episodes'}
+                        </span>
+                        <span className="sm:hidden"> ep</span>
                       </div>
-                      <div className="flex flex-wrap gap-1">
+
+                      {/* Desktop Premiere/Finale Badges */}
+                      <div className="hidden sm:flex flex-wrap gap-1">
                         {stats!.premieres > 0 && (
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/25 text-emerald-300 flex items-center gap-0.5">
                             <Flame className="w-2.5 h-2.5" /> {stats!.premieres} Prem
@@ -242,9 +243,19 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
                           </span>
                         )}
                       </div>
+
+                      {/* Mobile Compact Dots */}
+                      <div className="flex sm:hidden items-center gap-1">
+                        {stats!.premieres > 0 && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        )}
+                        {stats!.finales > 0 && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        )}
+                      </div>
                     </>
                   ) : (
-                    <div className="text-[10px] text-zinc-600">No drops</div>
+                    <div className="text-[9px] sm:text-[10px] text-zinc-600">-</div>
                   )}
                 </div>
               </div>
@@ -257,8 +268,8 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg sm:text-xl font-extrabold text-white flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-[#FAB818]" />
+            <h2 className="text-base sm:text-xl font-extrabold text-white flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-[#FAB818] shrink-0" />
               <span>Binge-Ready Season Finale Finder ({bingeFinaleShows.length} Series)</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
@@ -268,7 +279,7 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {bingeFinaleShows.map((show) => {
             const title = getDisplayTitle(show, titleLang);
             const finale = show.finaleSlot!;
@@ -285,7 +296,7 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
               <div
                 key={show.id}
                 onClick={() => onSelectShow(show)}
-                className="bg-[#141519] hover:bg-[#1B1D24] border border-[#2A2E3B] hover:border-[#FAB818]/60 rounded-2xl p-4 flex flex-col justify-between gap-3 cursor-pointer transition-all shadow-lg"
+                className="bg-[#141519] hover:bg-[#1B1D24] border border-[#2A2E3B] hover:border-[#FAB818]/60 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between gap-3 cursor-pointer transition-all shadow-lg"
               >
                 <div className="flex gap-3.5">
                   <img
@@ -294,13 +305,13 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
                     className="w-16 h-24 object-cover rounded-xl shrink-0 border border-[#2A2E3B]"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
                       <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                         Finale: EP {finale.episodeNumber}
                       </span>
                       {beforeMar27 && (
                         <span className="text-[10px] text-emerald-400 font-semibold">
-                          Completes before Mar 27
+                          Completes ≤ Mar 27
                         </span>
                       )}
                     </div>
@@ -310,7 +321,7 @@ export const BingeHeatmapView: React.FC<BingeHeatmapViewProps> = ({
                     </h3>
 
                     <div className="mt-2 text-xs text-zinc-300">
-                      Binge-Ready Date:{' '}
+                      Binge-Ready:{' '}
                       <strong className="text-[#FAB818]">
                         {formatDateWithYear(finale.airingDate, displayTimezone)}
                       </strong>{' '}
