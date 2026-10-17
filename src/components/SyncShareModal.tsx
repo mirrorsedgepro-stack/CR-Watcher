@@ -9,12 +9,20 @@ import {
   Download,
   Upload,
   Loader2,
+  Fingerprint,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import { fetchAniListUserWatchlist } from '../services/anilistApi';
+import { VisitorProfileMeta } from '../utils/visitorCookie';
 
 interface SyncShareModalProps {
   isOpen: boolean;
   onClose: () => void;
+  visitorId: string;
+  visitorProfiles: VisitorProfileMeta[];
+  onSwitchVisitorCookie: (targetVisitorId?: string, label?: string) => void;
+  onRenameVisitorProfile: (visitorId: string, newLabel: string) => void;
   watchlist: Set<number>;
   watchedEpisodes: Record<number, number[]>;
   customOffsets: Record<number, number>;
@@ -29,6 +37,10 @@ interface SyncShareModalProps {
 export const SyncShareModal: React.FC<SyncShareModalProps> = ({
   isOpen,
   onClose,
+  visitorId,
+  visitorProfiles,
+  onSwitchVisitorCookie,
+  onRenameVisitorProfile,
   watchlist,
   watchedEpisodes,
   customOffsets,
@@ -37,6 +49,8 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
 }) => {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedWebcal, setCopiedWebcal] = useState(false);
+  const [copiedCookieId, setCopiedCookieId] = useState(false);
+  const [newProfileName, setNewProfileName] = useState('');
   const [anilistUser, setAnilistUser] = useState('');
   const [importingUser, setImportingUser] = useState(false);
   const [importStatus, setImportStatus] = useState<{
@@ -47,18 +61,23 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
 
   if (!isOpen) return null;
 
+  const activeProfile = visitorProfiles.find((p) => p.id === visitorId);
   const watchlistArr = Array.from(watchlist);
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cr-watcher.vercel.app';
+  const totalWatchedCount = Object.values(watchedEpisodes).reduce(
+    (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+    0
+  );
+
+  const origin =
+    typeof window !== 'undefined' ? window.location.origin : 'https://cr-watcher.vercel.app';
   const shareUrl =
-    watchlistArr.length > 0
-      ? `${origin}/?wl=${watchlistArr.join(',')}`
-      : origin;
+    watchlistArr.length > 0 ? `${origin}/?wl=${watchlistArr.join(',')}` : origin;
 
   const webcalHost = origin.replace(/^https?:\/\//, '');
   const webcalUrl =
     watchlistArr.length > 0
-      ? `webcal://${webcalHost}/api/calendar?shows=${watchlistArr.join(',')}`
-      : `webcal://${webcalHost}/api/calendar`;
+      ? `webcal://${webcalHost}/api/calendar?vid=${visitorId}&shows=${watchlistArr.join(',')}`
+      : `webcal://${webcalHost}/api/calendar?vid=${visitorId}`;
 
   const handleCopyShareUrl = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -70,6 +89,23 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
     navigator.clipboard.writeText(webcalUrl);
     setCopiedWebcal(true);
     setTimeout(() => setCopiedWebcal(false), 2500);
+  };
+
+  const handleCopyCookieId = () => {
+    navigator.clipboard.writeText(visitorId);
+    setCopiedCookieId(true);
+    setTimeout(() => setCopiedCookieId(false), 2500);
+  };
+
+  const handleCreateNewVisitorCookie = (e: React.FormEvent) => {
+    e.preventDefault();
+    const label = newProfileName.trim() || `Visitor ${visitorProfiles.length + 1}`;
+    onSwitchVisitorCookie(undefined, label);
+    setNewProfileName('');
+    setImportStatus({
+      type: 'success',
+      message: `Switched to new isolated visitor cookie profile "${label}". Watch tracking is now separated for this visitor.`,
+    });
   };
 
   const handleImportAniListUser = async (e: React.FormEvent) => {
@@ -87,7 +123,7 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
         onImportWatchlistIds(ids, true);
         setImportStatus({
           type: 'success',
-          message: `Imported ${ids.length} anime from @${anilistUser} into your Watchlist!`,
+          message: `Imported ${ids.length} anime from @${anilistUser} into this visitor's Watchlist!`,
         });
       }
     } catch (err: any) {
@@ -102,7 +138,8 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
 
   const handleDownloadBackup = () => {
     const payload = {
-      version: 1,
+      version: 2,
+      visitorId,
       exportedAt: new Date().toISOString(),
       watchlist: watchlistArr,
       watchedEpisodes,
@@ -114,7 +151,7 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'crunchycast-backup.json';
+    a.download = `crunchycast-${visitorId}-backup.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -125,7 +162,8 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
       onRestoreBackup(parsed);
       setImportStatus({
         type: 'success',
-        message: 'Successfully restored Watchlist, Watched Progress, and Custom Offsets!',
+        message:
+          'Successfully restored Watchlist, Watched Progress, and Custom Offsets into your visitor cookie!',
       });
       setJsonInput('');
     } catch {
@@ -149,15 +187,15 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
         <div className="p-4 sm:p-5 bg-[#1B1D24] border-b border-[#2A2E3B] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[#F47521]/20 text-[#F47521]">
-              <Share2 className="w-5 h-5" />
+              <Fingerprint className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-extrabold text-white">
-                Sync, Share &amp; Live Calendar Subscriptions
+                Visitor Cookie Profile, Sync &amp; Webcal
               </h2>
               <p className="text-xs text-zinc-400">
-                Sync across devices on your Vercel website, import from AniList, or subscribe via
-                Webcal
+                Each visitor&apos;s watched episodes and watchlist are isolated by their browser
+                cookie
               </p>
             </div>
           </div>
@@ -170,7 +208,7 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
           </button>
         </div>
 
-        <div className="p-5 space-y-6 max-h-[80vh] overflow-y-auto">
+        <div className="p-4 sm:p-5 space-y-6 overflow-y-auto">
           {importStatus && (
             <div
               className={`p-3 rounded-xl text-xs font-bold border ${
@@ -183,16 +221,114 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
             </div>
           )}
 
+          {/* Section 0: Visitor Cookie Session & Multi-Person Isolation */}
+          <div className="bg-[#0B0C10] border border-[#F47521]/40 rounded-2xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Fingerprint className="w-4 h-4 text-[#F47521]" />
+                <span className="text-xs font-extrabold uppercase tracking-wider text-white">
+                  Active Visitor Cookie Session
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                Cookie Isolated • {watchlistArr.length} Shows • {totalWatchedCount} Eps Watched
+              </span>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Your episode watch tracking (`cc_watched_{visitorId}`) and watchlist are stored in
+              your personal browser cookie (`crunchycast_visitor_id`) so every visitor on this site
+              sees only their own progress.
+            </p>
+
+            {/* Active Cookie ID + Rename */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 bg-[#141519] border border-[#2A2E3B] rounded-xl px-3 py-1.5 flex-1 min-w-[200px]">
+                <span className="text-[11px] text-zinc-400">Cookie ID:</span>
+                <code className="text-xs font-mono font-bold text-[#F47521] truncate">
+                  {visitorId}
+                </code>
+                <button
+                  onClick={handleCopyCookieId}
+                  className="ml-auto text-xs text-zinc-400 hover:text-white flex items-center gap-1"
+                  title="Copy Visitor Cookie ID"
+                >
+                  {copiedCookieId ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+
+              {activeProfile && (
+                <input
+                  type="text"
+                  value={activeProfile.label}
+                  onChange={(e) => onRenameVisitorProfile(visitorId, e.target.value)}
+                  placeholder="Profile Name"
+                  className="px-3 py-1.5 rounded-xl bg-[#141519] border border-[#2A2E3B] text-xs font-bold text-white w-36 focus:outline-none focus:border-[#F47521]"
+                  title="Name this visitor cookie profile"
+                />
+              )}
+            </div>
+
+            {/* Switch or Create Additional Visitor Cookie Profile (for shared devices) */}
+            <div className="pt-2 border-t border-[#2A2E3B]/70 space-y-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-300">
+                <Users className="w-3.5 h-3.5 text-[#F47521]" />
+                <span>Sharing this device? Switch or create a separate Visitor Cookie Profile:</span>
+              </div>
+
+              {visitorProfiles.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {visitorProfiles.map((prof) => {
+                    const isCurrent = prof.id === visitorId;
+                    return (
+                      <button
+                        key={prof.id}
+                        onClick={() => onSwitchVisitorCookie(prof.id)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
+                          isCurrent
+                            ? 'bg-[#F47521] text-black border-[#F47521]'
+                            : 'bg-[#141519] text-zinc-300 border-[#2A2E3B] hover:border-zinc-500'
+                        }`}
+                      >
+                        {prof.label} ({prof.id.slice(0, 8)})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateNewVisitorCookie} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newProfileName}
+                  onChange={(e) => setNewProfileName(e.target.value)}
+                  placeholder="New visitor name (e.g. Roommate / Player 2)..."
+                  className="flex-1 px-3 py-1.5 rounded-xl bg-[#141519] border border-[#2A2E3B] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#F47521]"
+                />
+                <button
+                  type="submit"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#1B1D24] hover:bg-[#232630] border border-[#2A2E3B] text-xs font-bold text-[#F47521] shrink-0 transition-all"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>New Visitor Cookie</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
           {/* 1. Shareable Multi-Device URL */}
           <div className="space-y-2">
             <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F47521] flex items-center gap-1.5">
               <Share2 className="w-3.5 h-3.5" />
-              <span>1. Shareable Watchlist Link (Multi-Device Sync)</span>
+              <span>1. Shareable Watchlist Link</span>
             </h3>
             <p className="text-xs text-zinc-400">
-              Open this link on your phone or another browser to automatically load your{' '}
-              <strong className="text-white">{watchlistArr.length}</strong> bookmarked Watchlist
-              shows:
+              Send this link to load your <strong className="text-white">{watchlistArr.length}</strong>{' '}
+              bookmarked Watchlist shows on another device:
             </p>
             <div className="flex gap-2">
               <input
@@ -215,11 +351,10 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
           <div className="space-y-2 pt-4 border-t border-[#2A2E3B]">
             <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#2ABDBB] flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5" />
-              <span>2. Live Auto-Updating Webcal Feed (Powered by Vercel /api/calendar)</span>
+              <span>2. Live Auto-Updating Webcal Feed (Scoped to Your Visitor Cookie)</span>
             </h3>
             <p className="text-xs text-zinc-400">
-              Subscribe once in Google Calendar, Apple Calendar, or Outlook. Whenever future
-              episode times update through March 27, your calendar stays synced automatically:
+              Subscribe once in Google Calendar, Apple Calendar, or Outlook:
             </p>
             <div className="flex gap-2">
               <input
@@ -249,7 +384,7 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
             </h3>
             <p className="text-xs text-zinc-400">
               Enter your public AniList username to import all of your <em>Watching</em> and{' '}
-              <em>Planning</em> anime directly into your CrunchyCast Watchlist:
+              <em>Planning</em> anime into this visitor cookie profile:
             </p>
             <div className="flex gap-2">
               <input
@@ -274,7 +409,7 @@ export const SyncShareModal: React.FC<SyncShareModalProps> = ({
           <div className="space-y-2.5 pt-4 border-t border-[#2A2E3B]">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-zinc-300">
-                4. Full JSON Backup &amp; Restore (Watchlist + Watched Progress)
+                4. Full JSON Backup &amp; Restore
               </h3>
               <button
                 onClick={handleDownloadBackup}

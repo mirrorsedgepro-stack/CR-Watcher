@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Sparkles,
   Keyboard,
+  Fingerprint,
 } from 'lucide-react';
 import {
   AnimeShow,
@@ -42,16 +43,32 @@ import {
   isNotificationSupported,
   requestNotificationPermission,
 } from './utils/notifications';
+import {
+  getKnownVisitorProfiles,
+  getOrCreateVisitorId,
+  loadVisitorCustomOffsets,
+  loadVisitorWatchedEpisodes,
+  loadVisitorWatchlist,
+  renameVisitorProfile,
+  saveVisitorCustomOffsets,
+  saveVisitorWatchedEpisodes,
+  saveVisitorWatchlist,
+  switchVisitorCookie,
+  VisitorProfileMeta,
+} from './utils/visitorCookie';
 
-const WATCHLIST_STORAGE_KEY = 'crunchycast_watchlist_v1';
-const WATCHED_STORAGE_KEY = 'crunchycast_watched_v1';
-const CUSTOM_OFFSETS_KEY = 'crunchycast_custom_offsets_v1';
 const OFFSET_MODE_KEY = 'crunchycast_offset_mode_v1';
 const TITLE_LANG_KEY = 'crunchycast_title_lang_v1';
 const TIMEZONE_KEY = 'crunchycast_timezone_v1';
 const NOTIF_ENABLED_KEY = 'crunchycast_notif_enabled_v1';
 
 export function App() {
+  // Initialize unique per-visitor cookie ID (`crunchycast_visitor_id`)
+  const [visitorId, setVisitorId] = useState<string>(() => getOrCreateVisitorId());
+  const [visitorProfiles, setVisitorProfiles] = useState<VisitorProfileMeta[]>(() =>
+    getKnownVisitorProfiles()
+  );
+
   const [now, setNow] = useState<Date>(() => new Date());
   const [anchorDate, setAnchorDate] = useState<Date>(() => startOfDay(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>('weekly');
@@ -82,32 +99,18 @@ export function App() {
     );
   });
 
-  const [customOffsets, setCustomOffsets] = useState<Record<number, number>>(() => {
-    try {
-      const saved = localStorage.getItem(CUSTOM_OFFSETS_KEY);
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  // Load Watchlist, Watched Episodes, and Custom Offsets strictly scoped to this visitor's cookie!
+  const [customOffsets, setCustomOffsets] = useState<Record<number, number>>(() =>
+    loadVisitorCustomOffsets(getOrCreateVisitorId())
+  );
 
-  const [watchlist, setWatchlist] = useState<Set<number>>(() => {
-    try {
-      const saved = localStorage.getItem(WATCHLIST_STORAGE_KEY);
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  const [watchlist, setWatchlist] = useState<Set<number>>(() =>
+    loadVisitorWatchlist(getOrCreateVisitorId())
+  );
 
-  const [watchedEpisodes, setWatchedEpisodes] = useState<Record<number, number[]>>(() => {
-    try {
-      const saved = localStorage.getItem(WATCHED_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [watchedEpisodes, setWatchedEpisodes] = useState<Record<number, number[]>>(() =>
+    loadVisitorWatchedEpisodes(getOrCreateVisitorId())
+  );
 
   const [filters, setFilters] = useState<FilterState>({
     search: '',
@@ -170,17 +173,32 @@ export function App() {
     localStorage.setItem(NOTIF_ENABLED_KEY, String(notificationsEnabled));
   }, [notificationsEnabled]);
 
+  // Persist visitor-isolated data directly to the visitor's cookies & visitor-scoped storage
   useEffect(() => {
-    localStorage.setItem(CUSTOM_OFFSETS_KEY, JSON.stringify(customOffsets));
-  }, [customOffsets]);
+    saveVisitorCustomOffsets(visitorId, customOffsets);
+  }, [visitorId, customOffsets]);
 
   useEffect(() => {
-    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(Array.from(watchlist)));
-  }, [watchlist]);
+    saveVisitorWatchlist(visitorId, watchlist);
+  }, [visitorId, watchlist]);
 
   useEffect(() => {
-    localStorage.setItem(WATCHED_STORAGE_KEY, JSON.stringify(watchedEpisodes));
-  }, [watchedEpisodes]);
+    saveVisitorWatchedEpisodes(visitorId, watchedEpisodes);
+  }, [visitorId, watchedEpisodes]);
+
+  const handleSwitchVisitorCookie = (targetVisitorId?: string, label?: string) => {
+    const nextId = switchVisitorCookie(targetVisitorId, label);
+    setVisitorId(nextId);
+    setVisitorProfiles(getKnownVisitorProfiles());
+    setWatchedEpisodes(loadVisitorWatchedEpisodes(nextId));
+    setWatchlist(loadVisitorWatchlist(nextId));
+    setCustomOffsets(loadVisitorCustomOffsets(nextId));
+  };
+
+  const handleRenameVisitorProfile = (targetId: string, newLabel: string) => {
+    const updated = renameVisitorProfile(targetId, newLabel);
+    setVisitorProfiles(updated);
+  };
 
   const loadScheduleData = async (forceRefresh = false) => {
     setIsLoading(true);
@@ -454,6 +472,8 @@ export function App() {
     return new Set(watchedEpisodes[selectedShow.id] || []);
   }, [selectedShow, watchedEpisodes]);
 
+  const activeVisitorProfile = visitorProfiles.find((p) => p.id === visitorId);
+
   return (
     <div className="min-h-screen flex flex-col bg-[#0B0C10] text-zinc-100">
       <Header
@@ -631,6 +651,20 @@ export function App() {
         <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="font-bold text-zinc-300">CrunchyCast Simulcast Tracker</span>
+            <span>•</span>
+            <button
+              onClick={() => setIsSyncModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#141519] border border-[#2A2E3B] text-zinc-300 hover:border-[#F47521] transition-colors"
+              title="Click to view or switch your Visitor Cookie Session"
+            >
+              <Fingerprint className="w-3 h-3 text-[#F47521]" />
+              <span>
+                Visitor Cookie:{' '}
+                <strong className="text-white">
+                  {activeVisitorProfile?.label || visitorId.slice(0, 10)}
+                </strong>
+              </span>
+            </button>
             <span className="hidden md:inline">•</span>
             <span className="hidden md:inline-flex items-center gap-1.5 text-zinc-400">
               <Keyboard className="w-3.5 h-3.5 text-[#F47521]" />
@@ -651,18 +685,14 @@ export function App() {
                 B
               </kbd>
               <span>Backlog</span>
-              <kbd className="px-1.5 py-0.5 rounded bg-[#141519] border border-[#2A2E3B] text-zinc-300">
-                /
-              </kbd>
-              <span>Search</span>
             </span>
           </div>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1 text-emerald-400">
-              ● Confirmed Slot = Official broadcast timestamp
+              ● Confirmed Slot
             </span>
             <span className="inline-flex items-center gap-1 text-amber-300">
-              <Sparkles className="w-3 h-3" /> Projected Slot = Weekly 7-day cadence projection
+              <Sparkles className="w-3 h-3" /> Projected Slot
             </span>
             <a
               href="https://www.crunchyroll.com/simulcastcalendar"
@@ -709,10 +739,14 @@ export function App() {
         }}
       />
 
-      {/* Multi-Device Sync, Shareable Link, AniList Import & Webcal Modal */}
+      {/* Multi-Device Sync, Visitor Cookie Profile Manager, Shareable Link & Webcal Modal */}
       <SyncShareModal
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
+        visitorId={visitorId}
+        visitorProfiles={visitorProfiles}
+        onSwitchVisitorCookie={handleSwitchVisitorCookie}
+        onRenameVisitorProfile={handleRenameVisitorProfile}
         watchlist={watchlist}
         watchedEpisodes={watchedEpisodes}
         customOffsets={customOffsets}

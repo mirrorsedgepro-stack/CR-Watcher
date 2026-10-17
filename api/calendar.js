@@ -1,9 +1,24 @@
 // Vercel Serverless Function: Dynamic Live Webcal (.ICS) Calendar Feed
-// Usage: GET /api/calendar?shows=195516,189323&offset=1
+// Automatically reads the visitor's cookie (`crunchycast_visitor_id` & `cc_wl_<visitorId>`)
+// or accepts explicit `?shows=195516,189323&vid=ccv_...`
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 const WEEK_SECONDS = 7 * 24 * 60 * 60;
 const MAX_PROJECTION_UNIX = Math.floor(new Date('2027-05-15T23:59:59Z').getTime() / 1000);
+
+function parseCookies(cookieHeader) {
+  const map = {};
+  if (!cookieHeader) return map;
+  const parts = String(cookieHeader).split(';');
+  for (const part of parts) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx === -1) continue;
+    const k = decodeURIComponent(part.slice(0, eqIdx).trim());
+    const v = decodeURIComponent(part.slice(eqIdx + 1).trim());
+    map[k] = v;
+  }
+  return map;
+}
 
 function formatIcsDate(date) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -19,7 +34,11 @@ function escapeIcsText(text) {
 
 export default async function handler(req, res) {
   try {
-    const showsParam = req.query?.shows || '';
+    const cookies = parseCookies(req.headers?.cookie);
+    const visitorId = req.query?.vid || cookies['crunchycast_visitor_id'] || 'default';
+    const cookieWatchlist = visitorId ? cookies[`cc_wl_${visitorId}`] : '';
+
+    const showsParam = req.query?.shows || cookieWatchlist || '';
     const offsetHours = Number(req.query?.offset ?? 1);
     const offsetSeconds = (Number.isNaN(offsetHours) ? 1 : offsetHours) * 3600;
 
@@ -132,7 +151,7 @@ export default async function handler(req, res) {
         events.push(
           [
             'BEGIN:VEVENT',
-            `UID:crunchycast-${media.id}-ep-${slot.ep}@crunchycast.vercel.app`,
+            `UID:crunchycast-${visitorId}-${media.id}-ep-${slot.ep}@crunchycast.vercel.app`,
             `DTSTAMP:${nowStamp}`,
             `DTSTART:${formatIcsDate(start)}`,
             `DTEND:${formatIcsDate(end)}`,
@@ -158,7 +177,7 @@ export default async function handler(req, res) {
     ].join('\r\n');
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=3600');
+    res.setHeader('Cache-Control', 'private, no-cache');
     res.status(200).send(ics);
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate live calendar feed' });
